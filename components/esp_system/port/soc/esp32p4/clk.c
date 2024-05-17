@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2022-2023 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2022-2024 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -11,6 +11,7 @@
 #include "sdkconfig.h"
 #include "esp_attr.h"
 #include "esp_log.h"
+#include "esp_sleep.h"
 #include "esp_clk_internal.h"
 #include "esp32p4/rom/ets_sys.h"
 #include "esp32p4/rom/uart.h"
@@ -18,6 +19,7 @@
 #include "soc/rtc.h"
 #include "soc/rtc_periph.h"
 #include "soc/i2s_reg.h"
+#include "soc/hp_sys_clkrst_reg.h"
 #include "esp_cpu.h"
 #include "hal/wdt_hal.h"
 #include "esp_private/esp_modem_clock.h"
@@ -39,14 +41,13 @@ static void select_rtc_slow_clk(soc_rtc_slow_clk_src_t rtc_slow_clk_src);
 
 static const char *TAG = "clk";
 
-
- __attribute__((weak)) void esp_clk_init(void)
+__attribute__((weak)) void esp_clk_init(void)
 {
 #if SOC_PMU_SUPPORTED
     pmu_init();
 #endif  //SOC_PMU_SUPPORTED
 
-    assert(rtc_clk_xtal_freq_get() == RTC_XTAL_FREQ_40M);
+    assert(rtc_clk_xtal_freq_get() == SOC_XTAL_FREQ_40M);
 
     rtc_clk_8m_enable(true);
     rtc_clk_fast_src_set(SOC_RTC_FAST_CLK_SRC_RC_FAST);
@@ -93,14 +94,19 @@ static const char *TAG = "clk";
 
     // Wait for UART TX to finish, otherwise some UART output will be lost
     // when switching APB frequency
-    esp_rom_output_tx_wait_idle(CONFIG_ESP_CONSOLE_ROM_SERIAL_PORT_NUM);
+    if (CONFIG_ESP_CONSOLE_ROM_SERIAL_PORT_NUM != -1) {
+        esp_rom_output_tx_wait_idle(CONFIG_ESP_CONSOLE_ROM_SERIAL_PORT_NUM);
+    }
 
     if (res)  {
         rtc_clk_cpu_freq_set_config(&new_config);
     }
 
     // Re calculate the ccount to make time calculation correct.
-    esp_cpu_set_cycle_count( (uint64_t)esp_cpu_get_cycle_count() * new_freq_mhz / old_freq_mhz );
+    esp_cpu_set_cycle_count((uint64_t)esp_cpu_get_cycle_count() * new_freq_mhz / old_freq_mhz);
+
+    // Set crypto clock (`clk_sec`) to use 240M PLL clock
+    REG_SET_FIELD(HP_SYS_CLKRST_PERI_CLK_CTRL25_REG, HP_SYS_CLKRST_REG_CRYPTO_CLK_SRC_SEL, 0x2);
 }
 
 static void select_rtc_slow_clk(soc_rtc_slow_clk_src_t rtc_slow_clk_src)
@@ -149,10 +155,10 @@ static void select_rtc_slow_clk(soc_rtc_slow_clk_src_t rtc_slow_clk_src)
             cal_val = rtc_clk_cal(RTC_CAL_RTC_MUX, SLOW_CLK_CAL_CYCLES);
         } else {
             const uint64_t cal_dividend = (1ULL << RTC_CLK_CAL_FRACT) * 1000000ULL;
-            cal_val = (uint32_t) (cal_dividend / rtc_clk_slow_freq_get_hz());
+            cal_val = (uint32_t)(cal_dividend / rtc_clk_slow_freq_get_hz());
         }
     } while (cal_val == 0);
-    ESP_EARLY_LOGD(TAG, "RTC_SLOW_CLK calibration value: %d", cal_val);
+    ESP_EARLY_LOGD(TAG, "RTC_SLOW_CLK calibration value: %" PRIu32, cal_val);
     esp_clk_slowclk_cal_set(cal_val);
 }
 
@@ -169,6 +175,21 @@ void rtc_clk_select_rtc_slow_clk(void)
  */
 __attribute__((weak)) void esp_perip_clk_init(void)
 {
+    soc_rtc_slow_clk_src_t rtc_slow_clk_src = rtc_clk_slow_src_get();
+
+    if (rtc_slow_clk_src == SOC_RTC_SLOW_CLK_SRC_RC32K) {
+        esp_sleep_pd_config(ESP_PD_DOMAIN_XTAL32K, ESP_PD_OPTION_AUTO);
+        esp_sleep_pd_config(ESP_PD_DOMAIN_RC32K, ESP_PD_OPTION_ON);
+        // RC slow (150K) always ON
+    } else if (rtc_slow_clk_src == SOC_RTC_SLOW_CLK_SRC_XTAL32K) {
+        esp_sleep_pd_config(ESP_PD_DOMAIN_RC32K, ESP_PD_OPTION_AUTO);
+        esp_sleep_pd_config(ESP_PD_DOMAIN_XTAL32K, ESP_PD_OPTION_ON);
+        // RC slow (150K) always ON
+    } else {
+        esp_sleep_pd_config(ESP_PD_DOMAIN_XTAL32K, ESP_PD_OPTION_AUTO);
+        esp_sleep_pd_config(ESP_PD_DOMAIN_RC32K, ESP_PD_OPTION_AUTO);
+    }
+
     ESP_EARLY_LOGW(TAG, "esp_perip_clk_init() has not been implemented yet");
 #if 0 // TODO: IDF-5658
     uint32_t common_perip_clk, hwcrypto_perip_clk, wifi_bt_sdio_clk = 0;
@@ -261,7 +282,7 @@ __attribute__((weak)) void esp_perip_clk_init(void)
 
     /* Set WiFi light sleep clock source to RTC slow clock */
     REG_SET_FIELD(SYSTEM_BT_LPCK_DIV_INT_REG, SYSTEM_BT_LPCK_DIV_NUM, 0);
-    CLEAR_PERI_REG_MASK(SYSTEM_BT_LPCK_DIV_FRAC_REG, SYSTEM_LPCLK_SEL_8M);
+    CLEAR_PERI_REG_MASK(SYSTEM_BT_LPCK_DIV_FRAC_REG, SYSTEM_LPCLK_SEL_XTAL32K | SYSTEM_LPCLK_SEL_XTAL | SYSTEM_LPCLK_SEL_8M | SYSTEM_LPCLK_SEL_RTC_SLOW);
     SET_PERI_REG_MASK(SYSTEM_BT_LPCK_DIV_FRAC_REG, SYSTEM_LPCLK_SEL_RTC_SLOW);
 
     /* Enable RNG clock. */

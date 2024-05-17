@@ -6,7 +6,6 @@ import inspect
 import os
 import re
 import sys
-from io import StringIO
 from pathlib import Path
 from typing import Dict
 from typing import List
@@ -36,6 +35,7 @@ USUAL_TO_FORMAL = {
     'esp32c5': 'ESP32-C5',
     'esp32h2': 'ESP32-H2',
     'esp32p4': 'ESP32-P4',
+    'esp32c61': 'ESP32-C61',
     'linux': 'Linux',
 }
 
@@ -49,6 +49,7 @@ FORMAL_TO_USUAL = {
     'ESP32-C5': 'esp32c5',
     'ESP32-H2': 'esp32h2',
     'ESP32-P4': 'esp32p4',
+    'ESP32-C61': 'esp32c61',
     'Linux': 'linux',
 }
 
@@ -260,7 +261,7 @@ def check_test_scripts(
 
         if _app.verified_targets == actual_verified_targets:
             return True
-        elif _app.verified_targets == sorted(actual_verified_targets + bypass_check_test_targets or []):  # type: ignore
+        elif not (set(_app.verified_targets) - set(actual_verified_targets + (bypass_check_test_targets or []))):
             print(f'WARNING: bypass test script check on {_app.app_dir} for targets {bypass_check_test_targets} ')
             return True
 
@@ -345,38 +346,6 @@ def check_test_scripts(
     sys.exit(exit_code)
 
 
-def sort_yaml(files: List[str]) -> None:
-    from ruamel.yaml import YAML, CommentedMap
-
-    yaml = YAML()
-    yaml.indent(mapping=2, sequence=4, offset=2)
-    yaml.width = 4096  # avoid wrap lines
-
-    exit_code = 0
-    for f in files:
-        with open(f) as fr:
-            file_s = fr.read()
-            fr.seek(0)
-            file_d: CommentedMap = yaml.load(fr)
-
-        sorted_yaml = CommentedMap(dict(sorted(file_d.items())))
-        file_d.copy_attributes(sorted_yaml)
-
-        with StringIO() as s:
-            yaml.dump(sorted_yaml, s)
-
-            string = s.getvalue()
-            if string != file_s:
-                with open(f, 'w') as fw:
-                    fw.write(string)
-                print(
-                    f'Sorted yaml file {f}. Please take a look. sometimes the format is a bit messy'
-                )
-                exit_code = 1
-
-    sys.exit(exit_code)
-
-
 def check_exist() -> None:
     exit_code = 0
 
@@ -422,9 +391,6 @@ if __name__ == '__main__':
         help='default build test rules config file',
     )
 
-    _sort_yaml = action.add_parser('sort-yaml')
-    _sort_yaml.add_argument('files', nargs='+', help='all specified yaml files')
-
     _check_exist = action.add_parser('check-exist')
 
     arg = parser.parse_args()
@@ -434,9 +400,7 @@ if __name__ == '__main__':
         os.path.join(os.path.dirname(__file__), '..', '..')
     )
 
-    if arg.action == 'sort-yaml':
-        sort_yaml(arg.files)
-    elif arg.action == 'check-exist':
+    if arg.action == 'check-exist':
         check_exist()
     else:
         check_dirs = set()
@@ -462,9 +426,10 @@ if __name__ == '__main__':
         if check_all:
             check_dirs = {IDF_PATH}
             _exclude_dirs = [os.path.join(IDF_PATH, 'tools', 'unit-test-app'),
-                             os.path.join(IDF_PATH, 'tools', 'test_build_system', 'build_test_app')]
+                             os.path.join(IDF_PATH, 'tools', 'test_build_system', 'build_test_app'),
+                             os.path.join(IDF_PATH, 'examples', 'get-started', 'sample_project')]
         else:
-            _exclude_dirs = []
+            _exclude_dirs = [os.path.join(IDF_PATH, 'examples', 'get-started', 'sample_project')]
 
         extra_default_build_targets_list: List[str] = []
         bypass_check_test_targets_list: List[str] = []

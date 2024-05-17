@@ -495,8 +495,7 @@ esp_netif_t* esp_netif_get_handle_from_netif_impl(void *dev)
 
 void* esp_netif_get_netif_impl(esp_netif_t *esp_netif)
 {
-    // get impl ptr only for vanilla lwip impl (ppp_pcb not supported)
-    if (esp_netif && !ESP_NETIF_IS_POINT2POINT_TYPE(esp_netif, PPP_LWIP_NETIF)) {
+    if (esp_netif) {
         return esp_netif->lwip_netif;
     }
     return NULL;
@@ -1241,18 +1240,82 @@ void esp_netif_free_rx_buffer(void *h, void* buffer)
     esp_netif->driver_free_rx_buffer(esp_netif->driver_handle, buffer);
 }
 
+#ifdef CONFIG_ESP_NETIF_REPORT_DATA_TRAFFIC
+static esp_err_t esp_netif_tx_rx_event_api(esp_netif_api_msg_t *msg)
+{
+    bool enable = (bool)msg->data;
+    esp_netif_t *esp_netif = msg->esp_netif;
+    if (esp_netif == NULL) {
+        ESP_LOGE(TAG, "Invalid esp_netif");
+    }
+
+    ESP_LOGD(TAG, "%s esp_netif:%p", __func__, esp_netif);
+    esp_netif->tx_rx_events_enabled = enable;
+
+    return ESP_OK;
+}
+#endif
+
+esp_err_t esp_netif_tx_rx_event_enable(esp_netif_t *esp_netif)
+{
+#ifdef CONFIG_ESP_NETIF_REPORT_DATA_TRAFFIC
+    return esp_netif_lwip_ipc_call(esp_netif_tx_rx_event_api, esp_netif, (void*)true /* Enable */);
+#else
+    return ESP_FAIL;
+#endif
+}
+
+esp_err_t esp_netif_tx_rx_event_disable(esp_netif_t *esp_netif)
+{
+#ifdef CONFIG_ESP_NETIF_REPORT_DATA_TRAFFIC
+    return esp_netif_lwip_ipc_call(esp_netif_tx_rx_event_api, esp_netif, (void*)false /* Disable */);
+#else
+    return ESP_FAIL;
+#endif
+}
+
 esp_err_t esp_netif_transmit(esp_netif_t *esp_netif, void* data, size_t len)
 {
+#ifdef CONFIG_ESP_NETIF_REPORT_DATA_TRAFFIC
+    if (unlikely(esp_netif->tx_rx_events_enabled)) {
+        ip_event_tx_rx_t evt = {
+            .esp_netif = esp_netif,
+            .len = len,
+            .dir = ESP_NETIF_TX,
+        };
+        esp_event_post(IP_EVENT, IP_EVENT_TX_RX, &evt, sizeof(evt), 0);
+    }
+#endif
     return (esp_netif->driver_transmit)(esp_netif->driver_handle, data, len);
 }
 
 esp_err_t esp_netif_transmit_wrap(esp_netif_t *esp_netif, void *data, size_t len, void *pbuf)
 {
+#ifdef CONFIG_ESP_NETIF_REPORT_DATA_TRAFFIC
+    if (unlikely(esp_netif->tx_rx_events_enabled)) {
+        ip_event_tx_rx_t evt = {
+            .esp_netif = esp_netif,
+            .len = len,
+            .dir = ESP_NETIF_TX,
+        };
+        esp_event_post(IP_EVENT, IP_EVENT_TX_RX, &evt, sizeof(evt), 0);
+    }
+#endif
     return (esp_netif->driver_transmit_wrap)(esp_netif->driver_handle, data, len, pbuf);
 }
 
 esp_err_t esp_netif_receive(esp_netif_t *esp_netif, void *buffer, size_t len, void *eb)
 {
+#ifdef CONFIG_ESP_NETIF_REPORT_DATA_TRAFFIC
+    if (unlikely(esp_netif->tx_rx_events_enabled)) {
+        ip_event_tx_rx_t evt = {
+            .esp_netif = esp_netif,
+            .len = len,
+            .dir = ESP_NETIF_RX,
+        };
+        esp_event_post(IP_EVENT, IP_EVENT_TX_RX, &evt, sizeof(evt), 0);
+    }
+#endif
 #ifdef CONFIG_ESP_NETIF_RECEIVE_REPORT_ERRORS
     return esp_netif->lwip_input_fn(esp_netif->netif_handle, buffer, len, eb);
 #else
@@ -1406,7 +1469,7 @@ static esp_err_t esp_netif_dhcpc_stop_api(esp_netif_api_msg_t *msg)
             return ESP_ERR_ESP_NETIF_IF_NOT_READY;
         }
     } else if (esp_netif->dhcpc_status == ESP_NETIF_DHCP_STOPPED) {
-        ESP_LOGD(TAG, "dhcp client already stoped");
+        ESP_LOGD(TAG, "dhcp client already stopped");
         return ESP_ERR_ESP_NETIF_DHCP_ALREADY_STOPPED;
     }
 
@@ -1569,7 +1632,7 @@ static esp_err_t esp_netif_dhcps_stop_api(esp_netif_api_msg_t *msg)
             return ESP_ERR_ESP_NETIF_IF_NOT_READY;
         }
     } else if (esp_netif->dhcps_status == ESP_NETIF_DHCP_STOPPED) {
-        ESP_LOGD(TAG, "dhcp server already stoped");
+        ESP_LOGD(TAG, "dhcp server already stopped");
         return ESP_ERR_ESP_NETIF_DHCP_ALREADY_STOPPED;
     }
 
@@ -1833,7 +1896,7 @@ static esp_err_t esp_netif_set_ip_info_api(esp_netif_api_msg_t *msg)
     if (p_netif != NULL && netif_is_up(p_netif)) {
         netif_set_addr(p_netif, (ip4_addr_t*)&ip_info->ip, (ip4_addr_t*)&ip_info->netmask, (ip4_addr_t*)&ip_info->gw);
         if (ESP_NETIF_FLAG_EVENT_IP_MODIFIED & esp_netif->flags) {
-            if (!(ip4_addr_isany_val(ip_info->ip) || ip4_addr_isany_val(ip_info->netmask) || ip4_addr_isany_val(ip_info->gw))) {
+            if (!ip4_addr_isany_val(ip_info->ip)) {
 
                 ip_event_t evt_id = esp_netif->get_ip_event;
                 ip_event_got_ip_t evt = { .esp_netif = esp_netif, .ip_changed = false};
@@ -2333,6 +2396,10 @@ esp_err_t esp_netif_dhcps_option_api(esp_netif_api_msg_t *msg)
                 } else {
                     *(uint8_t *)opt_info &= ((~OFFER_DNS) & 0xFF);
                 }
+                break;
+            }
+            case ESP_NETIF_CAPTIVEPORTAL_URI: {
+                opt_info = (char *)opt->val;
                 break;
             }
 

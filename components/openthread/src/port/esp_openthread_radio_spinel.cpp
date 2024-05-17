@@ -1,11 +1,12 @@
 /*
- * SPDX-FileCopyrightText: 2022-2023 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2022-2024 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
 
 #include "esp_openthread_radio.h"
 
+#include "sdkconfig.h"
 #include "esp_check.h"
 #include "esp_err.h"
 #include "esp_openthread_border_router.h"
@@ -410,5 +411,12 @@ otError otPlatRadioConfigureEnhAckProbing(otInstance *aInstance, otLinkMetrics a
 {
     OT_UNUSED_VARIABLE(aInstance);
     return s_radio.ConfigureEnhAckProbing(aLinkMetrics, aShortAddress, *aExtAddress);
+}
+#endif
+
+#if CONFIG_OPENTHREAD_RX_ON_WHEN_IDLE
+void otPlatRadioSetRxOnWhenIdle(otInstance *aInstance, bool aEnable)
+{
+    s_radio.SetRxOnWhenIdle(aEnable);
 }
 #endif

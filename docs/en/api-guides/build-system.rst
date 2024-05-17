@@ -361,7 +361,7 @@ The following are some project/build variables that are available as build prope
   * If :ref:`CONFIG_APP_PROJECT_VER_FROM_CONFIG` option is set, the value of :ref:`CONFIG_APP_PROJECT_VER` will be used.
   * Else, if ``PROJECT_VER`` variable is set in project CMakeLists.txt file, its value will be used.
   * Else, if the ``PROJECT_DIR/version.txt`` exists, its contents will be used as ``PROJECT_VER``.
-  * Else, if ``VERSION`` argument is passed to the ``project()`` call in the CMakeLists.txt file as ``project(... VERSION x.y.z.w )`` then it will be used as ``PROJECT_VER``. The ``VERSION`` argument must be compilant with the `cmake standard <https://cmake.org/cmake/help/v3.16/command/project.html>`_.
+  * Else, if ``VERSION`` argument is passed to the ``project()`` call in the CMakeLists.txt file as ``project(... VERSION x.y.z.w )`` then it will be used as ``PROJECT_VER``. The ``VERSION`` argument must be compliant with the `cmake standard <https://cmake.org/cmake/help/v3.16/command/project.html>`_.
   * Else, if the project is located inside a Git repository, the output of git description will be used.
   * Otherwise, ``PROJECT_VER`` will be "1".
 - ``EXTRA_PARTITION_SUBTYPES``: CMake list of extra partition subtypes. Each subtype description is a comma-separated string with ``type_name, subtype_name, numeric_value`` format. Components may add new subtypes by appending them to this list.
@@ -1298,7 +1298,7 @@ These are properties that describe the build. Values of build properties can be 
 .. code-block:: cmake
 
   idf_build_get_property(python PYTHON)
-  message(STATUS "The Python intepreter is: ${python}")
+  message(STATUS "The Python interpreter is: ${python}")
 
 - BUILD_DIR - build directory; set from ``idf_build_process`` BUILD_DIR argument
 - BUILD_COMPONENTS - list of components included in the build; set by ``idf_build_process``
@@ -1418,7 +1418,7 @@ These are properties that describe a component. Values of component properties c
 - MANAGED_REQUIRES - list of public component dependencies added by the IDF component manager from dependencies in ``idf_component.yml`` manifest file
 - PRIV_INCLUDE_DIRS - list of component private include directories; set from ``idf_component_register`` PRIV_INCLUDE_DIRS on components of type LIBRARY
 - PRIV_REQUIRES - list of private component dependencies; set from value of ``idf_component_register`` PRIV_REQUIRES argument and dependencies in ``idf_component.yml`` manifest file
-- REQUIRED_IDF_TARGETS - list of targets the component supports; set from ``idf_component_register`` EMBED_TXTFILES argument
+- REQUIRED_IDF_TARGETS - list of targets the component supports; set from ``idf_component_register`` REQUIRED_IDF_TARGETS argument
 - REQUIRES - list of public component dependencies; set from value of ``idf_component_register`` REQUIRES argument and dependencies in ``idf_component.yml`` manifest file
 - SRCS - list of component source files; set from SRCS or SRC_DIRS/EXCLUDE_SRCS argument of ``idf_component_register``
 - WHOLE_ARCHIVE - if this property is set to ``TRUE`` (or any boolean "true" CMake value: 1, ``ON``, ``YES``, ``Y``), the component library is surrounded by ``-Wl,--whole-archive``, ``-Wl,--no-whole-archive`` when linked. This can be used to force the linker to include every object file into the executable, even if the object file doesn't resolve any references from the rest of the application. This is commonly used when a component contains plugins or modules which rely on link-time registration. This property is ``FALSE`` by default. It can be set to ``TRUE`` from the component CMakeLists.txt file.
@@ -1590,7 +1590,7 @@ No Longer Available in CMake
 Some features are significantly different or removed in the CMake-based system. The following variables no longer exist in the CMake-based build system:
 
 - ``COMPONENT_BUILD_DIR``: Use ``CMAKE_CURRENT_BINARY_DIR`` instead.
-- ``COMPONENT_LIBRARY``: Defaulted to ``$(COMPONENT_NAME).a``, but the library name could be overriden by the component. The name of the component library can no longer be overriden by the component.
+- ``COMPONENT_LIBRARY``: Defaulted to ``$(COMPONENT_NAME).a``, but the library name could be overridden by the component. The name of the component library can no longer be overridden by the component.
 - ``CC``, ``LD``, ``AR``, ``OBJCOPY``: Full paths to each tool from the gcc xtensa cross-toolchain. Use ``CMAKE_C_COMPILER``, ``CMAKE_C_LINK_EXECUTABLE``, ``CMAKE_OBJCOPY``, etc instead. `Full list here <cmake language variables_>`_.
 - ``HOSTCC``, ``HOSTLD``, ``HOSTAR``: Full names of each tool from the host native toolchain. These are no longer provided, external projects should detect any required host toolchain manually.
 - ``COMPONENT_ADD_LDFLAGS``: Used to override linker flags. Use the CMake `target_link_libraries`_ command instead.

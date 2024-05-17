@@ -125,14 +125,10 @@ esp_err_t esp_console_cmd_register(const esp_console_cmd_t *cmd)
         unused = asprintf(&item->hint, " %s", cmd->hint);
     } else if (cmd->argtable) {
         /* Generate hint based on cmd->argtable */
-        char *buf = NULL;
-        size_t buf_size = 0;
-        FILE *f = open_memstream(&buf, &buf_size);
-        if (f != NULL) {
-            arg_print_syntax(f, cmd->argtable, NULL);
-            fclose(f);
-        }
-        item->hint = buf;
+        arg_dstr_t ds = arg_dstr_create();
+        arg_print_syntax_ds(ds, cmd->argtable, NULL);
+        item->hint = strdup(arg_dstr_cstr(ds));
+        arg_dstr_destroy(ds);
     }
     item->argtable = cmd->argtable;
 
@@ -144,17 +140,27 @@ esp_err_t esp_console_cmd_register(const esp_console_cmd_t *cmd)
         item->context = cmd->context;
     }
 
-    cmd_item_t *last = NULL;
+    cmd_item_t *last;
     cmd_item_t *it;
+#if CONFIG_CONSOLE_SORTED_HELP
+    last = NULL;
     SLIST_FOREACH(it, &s_cmd_list, next) {
         if (strcmp(it->command, item->command) > 0) {
             break;
         }
         last = it;
     }
+#else
+    last = SLIST_FIRST(&s_cmd_list);
+#endif
     if (last == NULL) {
         SLIST_INSERT_HEAD(&s_cmd_list, item, next);
     } else {
+#if !CONFIG_CONSOLE_SORTED_HELP
+        while ((it = SLIST_NEXT(last, next)) != NULL) {
+            last = it;
+        }
+#endif
         SLIST_INSERT_AFTER(last, item, next);
     }
     return ESP_OK;
@@ -244,22 +250,22 @@ static struct {
 
 static void print_arg_help(cmd_item_t *it)
 {
-     /* First line: command name and hint
-      * Pad all the hints to the same column
-      */
-     const char *hint = (it->hint) ? it->hint : "";
-     printf("%-s %s\n", it->command, hint);
-     /* Second line: print help.
-      * Argtable has a nice helper function for this which does line
-      * wrapping.
-      */
-     printf("  "); // arg_print_formatted does not indent the first line
-     arg_print_formatted(stdout, 2, 78, it->help);
-     /* Finally, print the list of arguments */
-     if (it->argtable) {
-         arg_print_glossary(stdout, (void **) it->argtable, "  %12s  %s\n");
-     }
-     printf("\n");
+    /* First line: command name and hint
+     * Pad all the hints to the same column
+     */
+    const char *hint = (it->hint) ? it->hint : "";
+    printf("%-s %s\n", it->command, hint);
+    /* Second line: print help.
+     * Argtable has a nice helper function for this which does line
+     * wrapping.
+     */
+    printf("  "); // arg_print_formatted does not indent the first line
+    arg_print_formatted(stdout, 2, 78, it->help);
+    /* Finally, print the list of arguments */
+    if (it->argtable) {
+        arg_print_glossary(stdout, (void **) it->argtable, "  %12s  %s\n");
+    }
+    printf("\n");
 }
 
 static int help_command(int argc, char **argv)
@@ -316,7 +322,7 @@ esp_err_t esp_console_register_help_command(void)
     esp_console_cmd_t command = {
         .command = "help",
         .help = "Print the summary of all registered commands if no arguments "
-                "are given, otherwise print summary of given command.",
+        "are given, otherwise print summary of given command.",
         .func = &help_command,
         .argtable = &help_args
     };

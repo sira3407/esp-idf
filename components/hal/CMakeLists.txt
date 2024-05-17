@@ -4,9 +4,15 @@ set(srcs "hal_utils.c")
 set(includes "platform_port/include")
 
 # target specific include must be added before the generic one
-# becuase of the "include_next" directive used by the efuse_hal.h
+# because of the "include_next" directive used by the efuse_hal.h
 if(NOT ${target} STREQUAL "linux")
     list(APPEND includes "${target}/include")
+
+    if(CONFIG_IDF_TARGET_ESP32C5_BETA3_VERSION)
+        list(APPEND includes "${target}/beta3/include")
+    elseif(CONFIG_IDF_TARGET_ESP32C5_MP_VERSION)
+        list(APPEND includes "${target}/mp/include")
+    endif()
 endif()
 list(APPEND includes "include")
 
@@ -111,22 +117,22 @@ if(NOT BOOTLOADER_BUILD)
 
     if(CONFIG_SOC_GDMA_SUPPORTED)
         list(APPEND srcs "gdma_hal_top.c")
-    endif()
 
-    if(CONFIG_SOC_GDMA_SUPPORT_CRC)
-        list(APPEND srcs "gdma_hal_crc_gen.c")
-    endif()
+        if(CONFIG_SOC_GDMA_SUPPORT_CRC)
+            list(APPEND srcs "gdma_hal_crc_gen.c")
+        endif()
 
-    if(CONFIG_SOC_AHB_GDMA_VERSION EQUAL 1)
-        list(APPEND srcs "gdma_hal_ahb_v1.c")
-    endif()
+        if(CONFIG_SOC_AHB_GDMA_VERSION EQUAL 1)
+            list(APPEND srcs "gdma_hal_ahb_v1.c")
+        endif()
 
-    if(CONFIG_SOC_AHB_GDMA_VERSION EQUAL 2)
-        list(APPEND srcs "gdma_hal_ahb_v2.c")
-    endif()
+        if(CONFIG_SOC_AHB_GDMA_VERSION EQUAL 2)
+            list(APPEND srcs "gdma_hal_ahb_v2.c")
+        endif()
 
-    if(CONFIG_SOC_AXI_GDMA_SUPPORTED)
-        list(APPEND srcs "gdma_hal_axi.c")
+        if(CONFIG_SOC_AXI_GDMA_SUPPORTED)
+            list(APPEND srcs "gdma_hal_axi.c")
+        endif()
     endif()
 
     if(CONFIG_SOC_DW_GDMA_SUPPORTED)
@@ -163,10 +169,10 @@ if(NOT BOOTLOADER_BUILD)
 
     if(CONFIG_SOC_ADC_SUPPORTED)
         list(APPEND srcs "adc_hal_common.c" "adc_oneshot_hal.c")
-    endif()
 
-    if(CONFIG_SOC_ADC_DMA_SUPPORTED)
-        list(APPEND srcs "adc_hal.c")
+        if(CONFIG_SOC_ADC_DMA_SUPPORTED)
+            list(APPEND srcs "adc_hal.c")
+        endif()
     endif()
 
     if(CONFIG_SOC_LCDCAM_SUPPORTED)
@@ -175,6 +181,10 @@ if(NOT BOOTLOADER_BUILD)
 
     if(CONFIG_SOC_MIPI_DSI_SUPPORTED)
         list(APPEND srcs "mipi_dsi_hal.c")
+    endif()
+
+    if(CONFIG_SOC_MIPI_CSI_SUPPORTED)
+        list(APPEND srcs "mipi_csi_hal.c")
     endif()
 
     if(CONFIG_SOC_ECC_SUPPORTED)
@@ -197,7 +207,7 @@ if(NOT BOOTLOADER_BUILD)
         list(APPEND srcs "aes_hal.c")
     endif()
 
-    if(CONFIG_SOC_MODEM_CLOCK_IS_INDEPENDENT)
+    if(CONFIG_SOC_MODEM_CLOCK_IS_INDEPENDENT AND CONFIG_SOC_MODEM_CLOCK_SUPPORTED)
         list(APPEND srcs "${target}/modem_clock_hal.c")
     endif()
 
@@ -209,16 +219,21 @@ if(NOT BOOTLOADER_BUILD)
         list(APPEND srcs "brownout_hal.c")
     endif()
 
-    if(CONFIG_SOC_GPSPI_SUPPORTED)
-        list(APPEND srcs
-                    "spi_hal.c"
-                    "spi_hal_iram.c"
-                    "spi_slave_hal.c"
-                    "spi_slave_hal_iram.c")
+    if(CONFIG_SOC_JPEG_CODEC_SUPPORTED)
+        list(APPEND srcs "jpeg_hal.c")
     endif()
 
-    if(CONFIG_SOC_SPI_SUPPORT_SLAVE_HD_VER2)
-        list(APPEND srcs "spi_slave_hd_hal.c")
+    if(CONFIG_SOC_GPSPI_SUPPORTED)
+        list(APPEND srcs
+            "spi_hal.c"
+            "spi_hal_iram.c"
+            "spi_slave_hal.c"
+            "spi_slave_hal_iram.c"
+        )
+
+        if(CONFIG_SOC_SPI_SUPPORT_SLAVE_HD_VER2)
+            list(APPEND srcs "spi_slave_hd_hal.c")
+        endif()
     endif()
 
     if(CONFIG_SOC_GPSPI_SUPPORTED AND NOT CONFIG_IDF_TARGET_ESP32)
@@ -247,10 +262,14 @@ if(NOT BOOTLOADER_BUILD)
         list(APPEND srcs "ds_hal.c")
     endif()
 
+    if(CONFIG_SOC_USB_SERIAL_JTAG_SUPPORTED)
+        list(APPEND srcs "usb_serial_jtag_hal.c")
+    endif()
+
     if(CONFIG_SOC_USB_OTG_SUPPORTED)
         list(APPEND srcs
                     "usb_dwc_hal.c"
-                    "usb_fsls_phy_hal.c")
+                    "usb_wrap_hal.c")
     endif()
 
     if(${target} STREQUAL "esp32")

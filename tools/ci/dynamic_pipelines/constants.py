@@ -1,6 +1,5 @@
 # SPDX-FileCopyrightText: 2024 Espressif Systems (Shanghai) CO LTD
 # SPDX-License-Identifier: Apache-2.0
-
 import os
 
 from idf_ci_utils import IDF_PATH
@@ -13,7 +12,7 @@ DEFAULT_TEST_PATHS = [
 ]
 
 DEFAULT_APPS_BUILD_PER_JOB = 60
-DEFAULT_CASES_TEST_PER_JOB = 60
+DEFAULT_CASES_TEST_PER_JOB = 30
 
 DEFAULT_BUILD_CHILD_PIPELINE_FILEPATH = os.path.join(IDF_PATH, 'build_child_pipeline.yml')
 DEFAULT_TARGET_TEST_CHILD_PIPELINE_FILEPATH = os.path.join(IDF_PATH, 'target_test_child_pipeline.yml')
@@ -31,3 +30,7 @@ REPORT_TEMPLATE_FILEPATH = os.path.join(
 )
 
 BUILD_ONLY_LABEL = 'For Maintainers: Only Build Tests'
+
+KNOWN_GENERATE_TEST_CHILD_PIPELINE_WARNINGS_FILEPATH = os.path.join(
+    IDF_PATH, 'tools', 'ci', 'dynamic_pipelines', 'templates', 'known_generate_test_child_pipeline_warnings.yml'
+)

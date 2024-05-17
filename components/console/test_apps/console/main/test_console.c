@@ -25,9 +25,11 @@
  */
 
 typedef struct {
-        const char *in;
-        const char *out;
+    const char *in;
+    const char *out;
 } cmd_context_t;
+
+static esp_console_repl_t *s_repl = NULL;
 
 static int do_hello_cmd_with_context(void *context, int argc, char **argv)
 {
@@ -78,6 +80,15 @@ TEST_CASE("esp console register with normal and context aware function set to NU
     TEST_ESP_OK(esp_console_deinit());
 }
 
+TEST_CASE("esp console init function NULL param fails", "[console]")
+{
+    esp_console_repl_config_t repl_config = ESP_CONSOLE_REPL_CONFIG_DEFAULT();
+    esp_console_dev_uart_config_t uart_config = ESP_CONSOLE_DEV_UART_CONFIG_DEFAULT();
+    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_ARG, esp_console_new_repl_uart(NULL, &repl_config, &s_repl));
+    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_ARG, esp_console_new_repl_uart(&uart_config, NULL, &s_repl));
+    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_ARG, esp_console_new_repl_uart(&uart_config, &repl_config, NULL));
+}
+
 TEST_CASE("esp console init/deinit test", "[console]")
 {
     esp_console_config_t console_config = ESP_CONSOLE_CONFIG_DEFAULT();
@@ -111,8 +122,6 @@ TEST_CASE("esp console init/deinit with context test", "[console]")
     TEST_ESP_OK(esp_console_cmd_register(&cmd));
     TEST_ESP_OK(esp_console_deinit());
 }
-
-static esp_console_repl_t *s_repl = NULL;
 
 /* handle 'quit' command */
 static int do_cmd_quit(int argc, char **argv)
@@ -165,9 +174,9 @@ TEST_CASE("esp console help command - sorted registration", "[console][ignore]")
     esp_console_dev_uart_config_t uart_config = ESP_CONSOLE_DEV_UART_CONFIG_DEFAULT();
     TEST_ESP_OK(esp_console_new_repl_uart(&uart_config, &repl_config, &s_repl));
 
-    TEST_ESP_OK(esp_console_cmd_register(&s_quit_cmd));
-    TEST_ESP_OK(esp_console_register_help_command());
     TEST_ESP_OK(esp_console_cmd_register(&cmd_a));
+    TEST_ESP_OK(esp_console_register_help_command());
+    TEST_ESP_OK(esp_console_cmd_register(&s_quit_cmd));
     TEST_ESP_OK(esp_console_cmd_register(&cmd_z));
 
     TEST_ESP_OK(esp_console_start_repl(s_repl));
@@ -185,9 +194,9 @@ TEST_CASE("esp console help command - reverse registration", "[console][ignore]"
     TEST_ESP_OK(esp_console_new_repl_uart(&uart_config, &repl_config, &s_repl));
 
     TEST_ESP_OK(esp_console_cmd_register(&cmd_z));
-    TEST_ESP_OK(esp_console_cmd_register(&cmd_a));
-    TEST_ESP_OK(esp_console_register_help_command());
     TEST_ESP_OK(esp_console_cmd_register(&s_quit_cmd));
+    TEST_ESP_OK(esp_console_register_help_command());
+    TEST_ESP_OK(esp_console_cmd_register(&cmd_a));
 
     TEST_ESP_OK(esp_console_start_repl(s_repl));
     vTaskDelay(pdMS_TO_TICKS(5000));
@@ -230,8 +239,8 @@ TEST_CASE("esp console test with context", "[console]")
     };
 
     cmd_context_t context1 = {
-       .in = "c2",
-       .out = NULL,
+        .in = "c2",
+        .out = NULL,
     };
 
     const esp_console_cmd_t cmd0 = {
@@ -243,11 +252,11 @@ TEST_CASE("esp console test with context", "[console]")
     };
 
     const esp_console_cmd_t cmd1 = {
-       .command = "hello-c2",
-       .help = "Print Hello World in context c2",
-       .hint = NULL,
-       .func_w_context = do_hello_cmd_with_context,
-       .context = &context1,
+        .command = "hello-c2",
+        .help = "Print Hello World in context c2",
+        .hint = NULL,
+        .func_w_context = do_hello_cmd_with_context,
+        .context = &context1,
     };
 
     TEST_ESP_OK(esp_console_cmd_register(&cmd0));

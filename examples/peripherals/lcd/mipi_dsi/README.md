@@ -45,6 +45,14 @@ The connection between ESP Board and the LCD is as follows:
 
 Before testing your LCD, you also need to read your LCD spec carefully, and then adjust the values like "resolution" and "blank time" in the [main](./main/mipi_dsi_lcd_example_main.c) file.
 
+### Configure
+
+Run `idf.py menuconfig` and go to `Example Configuration`:
+
+* Choose whether to `Use DMA2D to copy draw buffer to frame buffer` asynchronously. If you choose `No`, the draw buffer will be copied to the frame buffer synchronously by CPU.
+* Choose if you want to `Monitor FPS by GPIO`. If you choose `Yes`, then you can attach an oscilloscope or logic analyzer to the GPIO pin to monitor the FPS of the display.
+  Please note, the actual FPS should be **double** the square wave frequency.
+
 ### Build and Flash
 
 Run `idf.py -p PORT build flash monitor` to build, flash and monitor the project. A LVGL widget should show up on the LCD as expected.

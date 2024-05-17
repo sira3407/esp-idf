@@ -44,7 +44,7 @@ static void IRAM_ATTR print_entry(uint32_t pc, uint32_t sp, bool panic)
         panic_print_str(":0x");
         panic_print_hex(sp);
     } else {
-        esp_rom_printf(" 0x%08X:0x%08X", pc, sp);
+        esp_rom_printf(" 0x%08" PRIX32 ":0x%08" PRIX32, pc, sp);
     }
 }
 
@@ -227,7 +227,7 @@ esp_err_t IRAM_ATTR esp_backtrace_print_all_tasks(int depth)
         }
         // Print backtrace
         char* name = pcTaskGetName(task_hdl);
-        print_str(name ? name : "No Name" , false);
+        print_str(name ? name : "No Name", false);
         esp_err_t bt_ret = esp_backtrace_print_from_frame(depth, &stk_frame, false);
         if (bt_ret != ESP_OK) {
             ret = bt_ret;

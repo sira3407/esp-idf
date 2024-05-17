@@ -55,7 +55,6 @@ tools/ci/check_codeowners.py
 tools/ci/check_deprecated_kconfigs.py
 tools/ci/check_esp_memory_utils_headers.sh
 tools/ci/check_examples_extra_component_dirs.sh
-tools/ci/check_examples_rom_header.sh
 tools/ci/check_executables.py
 tools/ci/check_idf_version.sh
 tools/ci/check_kconfigs.py
@@ -77,6 +76,7 @@ tools/ci/gitlab_yaml_linter.py
 tools/ci/mirror-submodule-update.sh
 tools/ci/multirun_with_pyenv.sh
 tools/ci/push_to_github.sh
+tools/ci/sort_yaml.py
 tools/ci/test_autocomplete/test_autocomplete.py
 tools/ci/test_configure_ci_environment.sh
 tools/ci/test_reproducible_build.sh

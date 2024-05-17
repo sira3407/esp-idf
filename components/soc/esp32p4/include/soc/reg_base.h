@@ -160,8 +160,8 @@
 /**
  * @brief: Special memory address
  */
-#define MIPI_CSI_MEM_BASE             0x50104000
-#define MIPI_DSI_MEM_BASE             0x50105000
+#define MIPI_CSI_BRG_MEM_BASE         0x50104000
+#define MIPI_DSI_BRG_MEM_BASE         0x50105000
 
 /**
  * This are module helper MACROs for quick module reference
@@ -201,8 +201,7 @@
 // #define DR_REG_LP_TEE_BASE                      0x600B3400
 // #define DR_REG_LP_APM_BASE                      0x600B3800
 
-//TODO: IDF-7531
-// #define DR_REG_PAU_BASE                         0x60093000
+#define DR_REG_PAU_BASE                         DR_REG_REGDMA_BASE
 
 //TODO: IDF-7688
 // #define DR_REG_TRACE_BASE                       0x600C0000

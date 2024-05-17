@@ -358,7 +358,7 @@ static inline void spi_ll_slave_reset(spi_dev_t *hw)
 /**
  * Reset SPI CPU TX FIFO
  *
- * On P4, this function is not seperated
+ * On P4, this function is not separated
  *
  * @param hw Beginning address of the peripheral registers.
  */
@@ -371,7 +371,7 @@ static inline void spi_ll_cpu_tx_fifo_reset(spi_dev_t *hw)
 /**
  * Reset SPI CPU RX FIFO
  *
- * On P4, this function is not seperated
+ * On P4, this function is not separated
  *
  * @param hw Beginning address of the peripheral registers.
  */
@@ -692,12 +692,16 @@ static inline void spi_ll_master_set_line_mode(spi_dev_t *hw, spi_line_mode_t li
     hw->user.val &= ~SPI_LL_ONE_LINE_USER_MASK;
     hw->ctrl.fcmd_dual = (line_mode.cmd_lines == 2);
     hw->ctrl.fcmd_quad = (line_mode.cmd_lines == 4);
+    hw->ctrl.fcmd_oct = (line_mode.cmd_lines == 8);
     hw->ctrl.faddr_dual = (line_mode.addr_lines == 2);
     hw->ctrl.faddr_quad = (line_mode.addr_lines == 4);
+    hw->ctrl.faddr_oct = (line_mode.addr_lines == 8);
     hw->ctrl.fread_dual = (line_mode.data_lines == 2);
     hw->user.fwrite_dual = (line_mode.data_lines == 2);
     hw->ctrl.fread_quad = (line_mode.data_lines == 4);
     hw->user.fwrite_quad = (line_mode.data_lines == 4);
+    hw->ctrl.fread_oct = (line_mode.data_lines == 8);
+    hw->user.fwrite_oct = (line_mode.data_lines == 8);
 }
 
 /**
@@ -756,7 +760,7 @@ static inline void spi_ll_master_set_clock_by_reg(spi_dev_t *hw, const spi_ll_cl
  * Get the frequency of given dividers. Don't use in app.
  *
  * @param fapb APB clock of the system.
- * @param pre  Pre devider.
+ * @param pre  Pre divider.
  * @param n    Main divider.
  *
  * @return     Frequency of given dividers.
@@ -767,10 +771,10 @@ static inline int spi_ll_freq_for_pre_n(int fapb, int pre, int n)
 }
 
 /**
- * Calculate the nearest frequency avaliable for master.
+ * Calculate the nearest frequency available for master.
  *
  * @param fapb       APB clock of the system.
- * @param hz         Frequncy desired.
+ * @param hz         Frequency desired.
  * @param duty_cycle Duty cycle desired.
  * @param out_reg    Output address to store the calculated clock configurations for the return frequency.
  *
@@ -850,7 +854,7 @@ static inline int spi_ll_master_cal_clock(int fapb, int hz, int duty_cycle, spi_
  *
  * @param hw         Beginning address of the peripheral registers.
  * @param fapb       APB clock of the system.
- * @param hz         Frequncy desired.
+ * @param hz         Frequency desired.
  * @param duty_cycle Duty cycle desired.
  *
  * @return           Actual frequency that is used.

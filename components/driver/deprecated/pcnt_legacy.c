@@ -37,7 +37,6 @@
 #define PCNT_RCC_ATOMIC()
 #endif
 
-
 static const char *TAG = "pcnt(legacy)";
 
 #define PCNT_CHECK(a, str, ret_val) ESP_RETURN_ON_FALSE(a, ret_val, TAG, "%s", str)
@@ -369,7 +368,7 @@ static inline esp_err_t _pcnt_unit_config(pcnt_port_t pcnt_port, const pcnt_conf
     PCNT_CHECK(ctrl_io < 0 || GPIO_IS_VALID_GPIO(ctrl_io), "PCNT ctrl io error", ESP_ERR_INVALID_ARG);
     PCNT_CHECK((pcnt_config->pos_mode < PCNT_COUNT_MAX) && (pcnt_config->neg_mode < PCNT_COUNT_MAX), PCNT_COUNT_MODE_ERR_STR, ESP_ERR_INVALID_ARG);
     PCNT_CHECK((pcnt_config->hctrl_mode < PCNT_MODE_MAX) && (pcnt_config->lctrl_mode < PCNT_MODE_MAX), PCNT_CTRL_MODE_ERR_STR, ESP_ERR_INVALID_ARG);
-    /*Enalbe hardware module*/
+    /*Enable hardware module*/
     static bool pcnt_enable = false;
     if (pcnt_enable == false) {
         PCNT_RCC_ATOMIC() {

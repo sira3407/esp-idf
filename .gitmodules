@@ -120,10 +120,6 @@
 	path = components/openthread/lib
 	url = ../../espressif/esp-thread-lib.git
 
-[submodule "components/ieee802154/lib"]
-	path = components/ieee802154/lib
-	url = ../../espressif/esp-ieee802154-lib.git
-
 [submodule "components/bt/controller/lib_esp32h2/esp32h2-bt-lib"]
 	path = components/bt/controller/lib_esp32h2/esp32h2-bt-lib
 	url = ../../espressif/esp32h2-bt-lib.git
@@ -135,6 +131,10 @@
 [submodule "components/bt/controller/lib_esp32c6/esp32c6-bt-lib"]
 	path = components/bt/controller/lib_esp32c6/esp32c6-bt-lib
 	url = ../../espressif/esp32c6-bt-lib.git
+
+[submodule "components/bt/controller/lib_esp32c5/esp32c5-bt-lib"]
+	path = components/bt/controller/lib_esp32c5/esp32c5-bt-lib
+	url = ../../espressif/esp32c5-bt-lib.git
 
 [submodule "components/heap/tlsf"]
 	path = components/heap/tlsf

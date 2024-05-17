@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2022-2023 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2022-2024 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -16,8 +16,8 @@
 #include <stdbool.h>
 #include "soc/soc_caps.h"
 #include "soc/pcr_struct.h"
-#include "soc/lp_io_struct.h"
-#include "soc/lp_aon_struct.h"
+// #include "soc/lp_io_struct.h"
+// #include "soc/lp_aon_struct.h"
 #include "soc/pmu_struct.h"
 #include "hal/misc.h"
 #include "hal/assert.h"
@@ -323,7 +323,7 @@ static inline void rtcio_ll_force_unhold_all(void)
 static inline void rtcio_ll_wakeup_enable(int rtcio_num, rtcio_ll_wake_type_t type)
 {
     // TODO: [ESP32C5] IDF-8719
-    // LP_IO.pin[rtcio_num].wakeup_enable = 0x1;
+    // LP_IO.pin[rtcio_num].wakeup_enable = 1;
     // LP_IO.pin[rtcio_num].int_type = type;
     abort();
 }

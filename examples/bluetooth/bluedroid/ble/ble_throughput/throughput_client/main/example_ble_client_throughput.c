@@ -10,6 +10,7 @@
 *
 ****************************************************************************/
 
+#include "sdkconfig.h"
 #include <stdint.h>
 #include <string.h>
 #include <stdbool.h>
@@ -34,7 +35,7 @@
  * Thread/Task reference
  **********************************************************/
 #ifdef CONFIG_BLUEDROID_PINNED_TO_CORE
-#define BLUETOOTH_TASK_PINNED_TO_CORE              (CONFIG_BLUEDROID_PINNED_TO_CORE < portNUM_PROCESSORS ? CONFIG_BLUEDROID_PINNED_TO_CORE : tskNO_AFFINITY)
+#define BLUETOOTH_TASK_PINNED_TO_CORE              (CONFIG_BLUEDROID_PINNED_TO_CORE < CONFIG_FREERTOS_NUMBER_OF_CORES ? CONFIG_BLUEDROID_PINNED_TO_CORE : tskNO_AFFINITY)
 #else
 #define BLUETOOTH_TASK_PINNED_TO_CORE              (0)
 #endif
@@ -568,8 +569,7 @@ void app_main(void)
         return;
     }
 
-    esp_bluedroid_config_t bluedroid_cfg = BT_BLUEDROID_INIT_CONFIG_DEFAULT();
-    ret = esp_bluedroid_init_with_cfg(&bluedroid_cfg);
+    ret = esp_bluedroid_init();
     if (ret) {
         ESP_LOGE(GATTC_TAG, "%s init bluetooth failed, error code = %x", __func__, ret);
         return;

@@ -18,7 +18,6 @@
 #include "hal/assert.h"
 #include "soc/pmu_struct.h"
 
-
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -27,6 +26,11 @@ extern "C" {
  * LDO capabilities
  */
 #define LDO_LL_UNIT_NUM    4
+
+#define LDO_LL_ADJUSTABLE_CHAN_MASK 0x0F // all the 4 channels can be adjustable
+
+#define LDO_LL_MAX_VOLTAGE_MV 3300
+#define LDO_LL_MIN_VOLTAGE_MV 500
 
 /**
  * LDO LL macros, these macros are in the unit of mV
@@ -118,18 +122,6 @@ static inline void ldo_ll_set_output_voltage_mv(int ldo_id, int voltage_mv)
     } else {
         mul = 7;
         dref = 15;
-    }
-    if (mul > 7) {
-        mul = 7;
-    }
-    if (mul < 0) {
-        mul = 0;
-    }
-    if (dref > 15) {
-        dref = 15;
-    }
-    if (dref < 0) {
-        dref = 0;
     }
     /**
      * tieh_sel:

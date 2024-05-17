@@ -1,6 +1,8 @@
 menu "Driver Configurations"
 
-    menu "Legacy ADC Configuration"
+    orsource "./twai/Kconfig.twai"
+
+    menu "Legacy ADC Driver Configuration"
 
         config ADC_DISABLE_DAC
             depends on SOC_DAC_SUPPORTED
@@ -16,7 +18,7 @@ menu "Driver Configurations"
             bool "Suppress legacy driver deprecated warning"
             default n
             help
-                Wether to suppress the deprecation warnings when using legacy adc driver (driver/adc.h).
+                Whether to suppress the deprecation warnings when using legacy adc driver (driver/adc.h).
                 If you want to continue using the legacy driver, and don't want to see related deprecation warnings,
                 you can enable this option.
 
@@ -53,15 +55,46 @@ menu "Driver Configurations"
                 bool "Suppress legacy driver deprecated warning"
                 default n
                 help
-                    Wether to suppress the deprecation warnings when using legacy adc calibration
+                    Whether to suppress the deprecation warnings when using legacy adc calibration
                     driver (esp_adc_cal.h).
                     If you want to continue using the legacy driver, and don't want to see related
                     deprecation warnings, you can enable this option.
 
-        endmenu
+        endmenu # Legacy ADC Calibration Configuration
+    endmenu  # Legacy ADC Driver Configuration
 
-    endmenu  # ADC Configuration
+    menu "Legacy MCPWM Driver Configurations"
+        depends on SOC_MCPWM_SUPPORTED
+        config MCPWM_SUPPRESS_DEPRECATE_WARN
+            bool "Suppress legacy driver deprecated warning"
+            default n
+            help
+                Whether to suppress the deprecation warnings when using legacy MCPWM driver (driver/mcpwm.h).
+                If you want to continue using the legacy driver, and don't want to see related deprecation warnings,
+                you can enable this option.
+    endmenu # Legacy MCPWM Driver Configurations
 
-    orsource "./twai/Kconfig.twai"
+    menu "Legacy Timer Group Driver Configurations"
+        depends on SOC_GPTIMER_SUPPORTED
+        config GPTIMER_SUPPRESS_DEPRECATE_WARN
+            bool "Suppress legacy driver deprecated warning"
+            default n
+            help
+                Whether to suppress the deprecation warnings when using legacy timer group driver (driver/timer.h).
+                If you want to continue using the legacy driver, and don't want to see related deprecation warnings,
+                you can enable this option.
+
+    endmenu # Legacy Timer Group Driver Configurations
+
+    menu "Legacy RMT Driver Configurations"
+        depends on SOC_RMT_SUPPORTED
+        config RMT_SUPPRESS_DEPRECATE_WARN
+            bool "Suppress legacy driver deprecated warning"
+            default n
+            help
+                Whether to suppress the deprecation warnings when using legacy rmt driver (driver/rmt.h).
+                If you want to continue using the legacy driver, and don't want to see related deprecation warnings,
+                you can enable this option.
+    endmenu # Legacy RMT Driver Configurations
 
 endmenu  # Driver configurations

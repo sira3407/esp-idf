@@ -29,7 +29,9 @@
  */
 _Static_assert( offsetof( StaticTask_t, pxDummy6 ) == offsetof( TCB_t, pxStack ) );
 _Static_assert( offsetof( StaticTask_t, pxDummy8 ) == offsetof( TCB_t, pxEndOfStack ) );
+#if !CONFIG_IDF_TARGET_LINUX    // Disabled for linux builds due to differences in types
 _Static_assert( tskNO_AFFINITY == ( BaseType_t ) CONFIG_FREERTOS_NO_AFFINITY, "CONFIG_FREERTOS_NO_AFFINITY must be the same as tskNO_AFFINITY" );
+#endif
 
 /* ------------------------------------------------- Kernel Control ------------------------------------------------- */
 
@@ -406,7 +408,7 @@ BaseType_t xTaskGetCoreID( TaskHandle_t xTask )
         #if CONFIG_FREERTOS_SMP
             UBaseType_t uxCoreAffinityMask;
 
-            /* Get the core affinity mask and covert it to an ID */
+            /* Get the core affinity mask and convert it to an ID */
             uxCoreAffinityMask = vTaskCoreAffinityGet( xTask );
 
             /* If the task is not pinned to a particular core, treat it as tskNO_AFFINITY */
@@ -440,7 +442,7 @@ BaseType_t xTaskGetCoreID( TaskHandle_t xTask )
 }
 /*----------------------------------------------------------*/
 
-#if ( INCLUDE_xTaskGetIdleTaskHandle == 1 )
+#if ( ( !CONFIG_FREERTOS_SMP ) && ( INCLUDE_xTaskGetIdleTaskHandle == 1 ) )
 
     TaskHandle_t xTaskGetIdleTaskHandleForCore( BaseType_t xCoreID )
     {
@@ -451,10 +453,10 @@ BaseType_t xTaskGetCoreID( TaskHandle_t xTask )
         return xIdleTaskHandle[ xCoreID ];
     }
 
-#endif /* INCLUDE_xTaskGetIdleTaskHandle */
+#endif /* ( ( !CONFIG_FREERTOS_SMP ) && ( INCLUDE_xTaskGetIdleTaskHandle == 1 ) ) */
 /*----------------------------------------------------------*/
 
-#if ( ( INCLUDE_xTaskGetCurrentTaskHandle == 1 ) || ( configUSE_MUTEXES == 1 ) )
+#if ( ( !CONFIG_FREERTOS_SMP ) && ( ( INCLUDE_xTaskGetCurrentTaskHandle == 1 ) || ( configUSE_MUTEXES == 1 ) ) )
 
     TaskHandle_t xTaskGetCurrentTaskHandleForCore( BaseType_t xCoreID )
     {
@@ -478,14 +480,14 @@ BaseType_t xTaskGetCoreID( TaskHandle_t xTask )
         return xReturn;
     }
 
-#endif /* ( ( INCLUDE_xTaskGetCurrentTaskHandle == 1 ) || ( configUSE_MUTEXES == 1 ) ) */
+#endif /* ( ( !CONFIG_FREERTOS_SMP ) && ( ( INCLUDE_xTaskGetCurrentTaskHandle == 1 ) || ( configUSE_MUTEXES == 1 ) ) ) */
 /*----------------------------------------------------------*/
 
 #if ( !CONFIG_FREERTOS_SMP && ( configGENERATE_RUN_TIME_STATS == 1 ) && ( INCLUDE_xTaskGetIdleTaskHandle == 1 ) )
 
     configRUN_TIME_COUNTER_TYPE ulTaskGetIdleRunTimeCounterForCore( BaseType_t xCoreID )
     {
-        uint32_t ulRunTimeCounter;
+        configRUN_TIME_COUNTER_TYPE ulRunTimeCounter;
 
         configASSERT( taskVALID_CORE_ID( xCoreID ) == pdTRUE );
 
@@ -512,7 +514,11 @@ BaseType_t xTaskGetCoreID( TaskHandle_t xTask )
 
         configASSERT( taskVALID_CORE_ID( xCoreID ) == pdTRUE );
 
-        ulTotalTime = portGET_RUN_TIME_COUNTER_VALUE();
+        #ifdef portALT_GET_RUN_TIME_COUNTER_VALUE
+            portALT_GET_RUN_TIME_COUNTER_VALUE( ulTotalTime );
+        #else
+            ulTotalTime = portGET_RUN_TIME_COUNTER_VALUE();
+        #endif
 
         /* For percentage calculations. */
         ulTotalTime /= ( configRUN_TIME_COUNTER_TYPE ) 100;
@@ -743,7 +749,11 @@ uint8_t * pxTaskGetStackStart( TaskHandle_t xTask )
 
                         if( xYieldRequired != pdFALSE )
                         {
-                            taskYIELD_IF_USING_PREEMPTION();
+                            #if CONFIG_FREERTOS_SMP
+                                taskYIELD_TASK_CORE_IF_USING_PREEMPTION( pxTCB );
+                            #else
+                                taskYIELD_IF_USING_PREEMPTION();
+                            #endif
                         }
                     }
                 }
@@ -830,11 +840,11 @@ uint8_t * pxTaskGetStackStart( TaskHandle_t xTask )
 /**
  * @brief Get reentrancy structure of the current task
  *
- * - This funciton is required by newlib (when __DYNAMIC_REENT__ is enabled)
+ * - This function is required by newlib (when __DYNAMIC_REENT__ is enabled)
  * - It will return a pointer to the current task's reent struct
  * - If FreeRTOS is not running, it will return the global reent struct
  *
- * @return Pointer to a the (current taks's)/(globa) reent struct
+ * @return Pointer to a the (current taks's)/(global) reent struct
  */
     struct _reent * __getreent( void )
     {
@@ -849,16 +859,8 @@ uint8_t * pxTaskGetStackStart( TaskHandle_t xTask )
         }
         else
         {
-            /* We have a task; return its reentrant struct. */
-            #if ( CONFIG_FREERTOS_SMP )
-            {
-                ret = &pxCurTask->xNewLib_reent;
-            }
-            #else /* CONFIG_FREERTOS_SMP */
-            {
-                ret = &pxCurTask->xTLSBlock;
-            }
-            #endif /* CONFIG_FREERTOS_SMP */
+            /* We have a currently executing task. Return its reentrant struct. */
+            ret = &pxCurTask->xTLSBlock;
         }
 
         return ret;
@@ -919,7 +921,7 @@ static List_t * pxGetTaskListByIndex( UBaseType_t uxListIndex )
     {
         pxTaskList = &pxReadyTasksLists[ configMAX_PRIORITIES - 1 - uxListIndex ];
     }
-    else if( uxListIndex < configMAX_PRIORITIES + xNonReadyTaskListsCnt + 1 )
+    else if( uxListIndex < configMAX_PRIORITIES + xNonReadyTaskListsCnt )
     {
         pxTaskList = non_ready_task_lists[ uxListIndex - configMAX_PRIORITIES ];
     }
@@ -1002,7 +1004,7 @@ int xTaskGetNext( TaskIterator_t * xIterator )
         if( !portVALID_LIST_MEM( pxNextListItem ) )
         {
             /* Nothing to do with the corrupted list item. We will skip to the next task state list.
-             * pxNextListItem should be NULL at the beggining of each task list.
+             * pxNextListItem should be NULL at the beginning of each task list.
              */
             pxNextListItem = NULL;
             continue;

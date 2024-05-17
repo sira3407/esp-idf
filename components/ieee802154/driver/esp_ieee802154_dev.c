@@ -47,7 +47,6 @@ IEEE802154_STATIC volatile ieee802154_state_t s_ieee802154_state;
 static uint8_t *s_tx_frame = NULL;
 #define IEEE802154_RX_FRAME_SIZE (127 + 1 + 1) // +1: len, +1: for dma test
 
-#if CONFIG_IEEE802154_RECEIVE_DONE_HANDLER
 // +1: for the stub buffer when the valid buffers are full.
 //
 // |--------------------VB[0]--------------------|
@@ -62,10 +61,6 @@ static uint8_t *s_tx_frame = NULL;
 // STUB : Stub buffer, used when all valid buffers are under processing, the received frame will be dropped.
 static uint8_t s_rx_frame[CONFIG_IEEE802154_RX_BUFFER_SIZE + 1][IEEE802154_RX_FRAME_SIZE];
 static esp_ieee802154_frame_info_t s_rx_frame_info[CONFIG_IEEE802154_RX_BUFFER_SIZE + 1];
-#else
-static uint8_t s_rx_frame[CONFIG_IEEE802154_RX_BUFFER_SIZE][IEEE802154_RX_FRAME_SIZE];
-static esp_ieee802154_frame_info_t s_rx_frame_info[CONFIG_IEEE802154_RX_BUFFER_SIZE];
-#endif
 
 static uint8_t s_rx_index = 0;
 static uint8_t s_enh_ack_frame[128];
@@ -74,6 +69,7 @@ static portMUX_TYPE s_ieee802154_spinlock = portMUX_INITIALIZER_UNLOCKED;
 static intr_handle_t s_ieee802154_isr_handle = NULL;
 
 static esp_err_t ieee802154_sleep_init(void);
+static esp_err_t ieee802154_sleep_deinit(void);
 static void next_operation(void);
 static esp_err_t ieee802154_transmit_internal(const uint8_t *frame, bool cca);
 
@@ -85,7 +81,6 @@ typedef struct {
 static pending_tx_t s_pending_tx = { 0 };
 #endif
 
-#if CONFIG_IEEE802154_RECEIVE_DONE_HANDLER
 static void ieee802154_receive_done(uint8_t *data, esp_ieee802154_frame_info_t *frame_info)
 {
     // If the RX done packet is written in the stub buffer, drop it silently.
@@ -93,6 +88,8 @@ static void ieee802154_receive_done(uint8_t *data, esp_ieee802154_frame_info_t *
         esp_rom_printf("receive buffer full, drop the current frame.\n");
     } else {
         // Otherwise, post it to the upper layer.
+        // Ignore bit8 for the frame length, due to the max frame length is 127 based 802.15.4 spec.
+        data[0] = data[0] & 0x7f;
         frame_info->process = true;
         esp_ieee802154_receive_done(data, frame_info);
     }
@@ -113,7 +110,7 @@ static void ieee802154_transmit_done(const uint8_t *frame, const uint8_t *ack, e
     }
 }
 
-esp_err_t ieee802154_receive_handle_done(uint8_t *data)
+esp_err_t ieee802154_receive_handle_done(const uint8_t *data)
 {
     uint16_t size = data - &s_rx_frame[0][0];
     if ((size % IEEE802154_RX_FRAME_SIZE) != 0
@@ -123,18 +120,6 @@ esp_err_t ieee802154_receive_handle_done(uint8_t *data)
     s_rx_frame_info[size / IEEE802154_RX_FRAME_SIZE].process = false;
     return ESP_OK;
 }
-#else
-static void ieee802154_receive_done(uint8_t *data, esp_ieee802154_frame_info_t *frame_info)
-{
-    esp_ieee802154_receive_done(data, frame_info);
-}
-
-static void ieee802154_transmit_done(const uint8_t *frame, const uint8_t *ack, esp_ieee802154_frame_info_t *ack_frame_info)
-{
-    esp_ieee802154_transmit_done(frame, ack, ack_frame_info);
-}
-
-#endif
 
 static IRAM_ATTR void event_end_process(void)
 {
@@ -179,8 +164,8 @@ uint8_t ieee802154_get_recent_lqi(void)
 IEEE802154_STATIC void set_next_rx_buffer(void)
 {
     uint8_t* next_rx_buffer = NULL;
-#if CONFIG_IEEE802154_RECEIVE_DONE_HANDLER
     uint8_t index = 0;
+
     if (s_rx_index != CONFIG_IEEE802154_RX_BUFFER_SIZE && s_rx_frame_info[s_rx_index].process == false) {
         // If buffer is not full, and current index is empty, set it to hardware.
         next_rx_buffer = s_rx_frame[s_rx_index];
@@ -204,16 +189,7 @@ IEEE802154_STATIC void set_next_rx_buffer(void)
         s_rx_index = CONFIG_IEEE802154_RX_BUFFER_SIZE;
         next_rx_buffer = s_rx_frame[CONFIG_IEEE802154_RX_BUFFER_SIZE];
     }
-#else
-    if (s_rx_frame[s_rx_index][0] != 0) {
-        s_rx_index++;
-        if (s_rx_index == CONFIG_IEEE802154_RX_BUFFER_SIZE) {
-            s_rx_index = 0;
-            memset(s_rx_frame[s_rx_index], 0, sizeof(s_rx_frame[s_rx_index]));
-        }
-    }
-    next_rx_buffer = (uint8_t *)&s_rx_frame[s_rx_index];
-#endif
+
     ieee802154_ll_set_rx_addr(next_rx_buffer);
 }
 
@@ -378,6 +354,8 @@ static IRAM_ATTR void next_operation(void)
 {
 #if !CONFIG_IEEE802154_TEST
     if (s_pending_tx.frame) {
+        // Here the driver needs to recover the setting of rx aborts, see function `ieee802154_transmit`.
+        ieee802154_ll_enable_rx_abort_events(BIT(IEEE802154_RX_ABORT_BY_TX_ACK_TIMEOUT - 1) | BIT(IEEE802154_RX_ABORT_BY_TX_ACK_COEX_BREAK - 1));
         ieee802154_transmit_internal(s_pending_tx.frame, s_pending_tx.cca);
         s_pending_tx.frame = NULL;
     } else
@@ -387,6 +365,9 @@ static IRAM_ATTR void next_operation(void)
             enable_rx();
         } else {
             ieee802154_set_state(IEEE802154_STATE_IDLE);
+#if !CONFIG_IEEE802154_TEST
+            ieee802154_sleep();
+#endif
         }
     }
 }
@@ -508,18 +489,18 @@ static IRAM_ATTR void isr_handle_rx_abort(void)
         IEEE802154_ASSERT(s_ieee802154_state == IEEE802154_STATE_RX);
 #if CONFIG_IEEE802154_TEST
         esp_ieee802154_receive_failed(rx_status);
-        next_operation();
 #endif
         break;
     case IEEE802154_RX_ABORT_BY_COEX_BREAK:
         IEEE802154_ASSERT(s_ieee802154_state == IEEE802154_STATE_RX);
+#if CONFIG_IEEE802154_TEST
         esp_ieee802154_receive_failed(rx_status);
+#endif
         break;
     case IEEE802154_RX_ABORT_BY_ED_ABORT:
     case IEEE802154_RX_ABORT_BY_ED_COEX_REJECT:
         IEEE802154_ASSERT(s_ieee802154_state == IEEE802154_STATE_ED || s_ieee802154_state == IEEE802154_STATE_CCA);
         esp_ieee802154_ed_failed(rx_status);
-        next_operation();
         break;
     case IEEE802154_RX_ABORT_BY_TX_ACK_TIMEOUT:
     case IEEE802154_RX_ABORT_BY_TX_ACK_COEX_BREAK:
@@ -529,7 +510,6 @@ static IRAM_ATTR void isr_handle_rx_abort(void)
 #else
         esp_ieee802154_receive_failed(rx_status);
 #endif
-        next_operation();
         break;
     case IEEE802154_RX_ABORT_BY_ENHACK_SECURITY_ERROR:
         IEEE802154_ASSERT(s_ieee802154_state == IEEE802154_STATE_TX_ENH_ACK);
@@ -538,11 +518,11 @@ static IRAM_ATTR void isr_handle_rx_abort(void)
 #else
         esp_ieee802154_receive_failed(rx_status);
 #endif
-        next_operation();
         break;
     default:
         IEEE802154_ASSERT(false);
     }
+    next_operation();
 }
 
 static IRAM_ATTR void isr_handle_tx_abort(void)
@@ -735,12 +715,6 @@ void ieee802154_enable(void)
 void ieee802154_disable(void)
 {
     modem_clock_module_disable(ieee802154_periph.module);
-#if SOC_PM_MODEM_RETENTION_BY_REGDMA && CONFIG_FREERTOS_USE_TICKLESS_IDLE
-#if SOC_PM_RETENTION_HAS_CLOCK_BUG && CONFIG_MAC_BB_PD
-    sleep_modem_unregister_mac_bb_module_prepare_callback(sleep_modem_mac_bb_power_down_prepare,
-                                                     sleep_modem_mac_bb_power_up_prepare);
-#endif // SOC_PM_RETENTION_HAS_CLOCK_BUG && CONFIG_MAC_BB_PD
-#endif // SOC_PM_MODEM_RETENTION_BY_REGDMA && CONFIG_FREERTOS_USE_TICKLESS_IDLE
     ieee802154_set_state(IEEE802154_STATE_DISABLE);
 }
 
@@ -792,7 +766,9 @@ esp_err_t ieee802154_mac_deinit(void)
     if (s_ieee802154_isr_handle) {
         ret = esp_intr_free(s_ieee802154_isr_handle);
         s_ieee802154_isr_handle = NULL;
+        ESP_RETURN_ON_FALSE(ret == ESP_OK, ESP_FAIL, IEEE802154_TAG, "IEEE802154 MAC ISR deinit failed");
     }
+    ESP_RETURN_ON_FALSE(ieee802154_sleep_deinit() == ESP_OK, ESP_FAIL, IEEE802154_TAG, "IEEE802154 MAC sleep deinit failed");
     return ret;
 }
 
@@ -842,6 +818,7 @@ static inline esp_err_t ieee802154_transmit_internal(const uint8_t *frame, bool 
 esp_err_t ieee802154_transmit(const uint8_t *frame, bool cca)
 {
 #if !CONFIG_IEEE802154_TEST
+    ieee802154_enter_critical();
     if ((s_ieee802154_state == IEEE802154_STATE_RX && ieee802154_ll_is_current_rx_frame())
         || s_ieee802154_state == IEEE802154_STATE_TX_ACK || s_ieee802154_state == IEEE802154_STATE_TX_ENH_ACK) {
         // If the current radio is processing an RX frame or sending an ACK, do not shut down the ongoing process.
@@ -850,8 +827,13 @@ esp_err_t ieee802154_transmit(const uint8_t *frame, bool cca)
         s_pending_tx.frame = frame;
         s_pending_tx.cca = cca;
         IEEE802154_TX_DEFERRED_NUMS_UPDATE();
+        // Here we enable all rx interrupts due to the driver needs to know when the current RX has finished.
+        // Will recover the setting of rx abort in function `next_operation`.
+        ieee802154_ll_enable_rx_abort_events(IEEE802154_RX_ABORT_ALL);
+        ieee802154_exit_critical();
         return ESP_OK;
     }
+    ieee802154_exit_critical();
 #endif
     return ieee802154_transmit_internal(frame, cca);
 }
@@ -921,11 +903,11 @@ esp_err_t ieee802154_receive_at(uint32_t time)
     uint32_t rx_target_time = time - IEEE802154_RX_RAMPUP_TIME_US;
     uint32_t current_time;
     IEEE802154_RF_ENABLE();
+    ieee802154_enter_critical();
     rx_init();
     IEEE802154_SET_TXRX_PTI(IEEE802154_SCENE_RX_AT);
     set_next_rx_buffer();
     ieee802154_set_state(IEEE802154_STATE_RX);
-    ieee802154_enter_critical();
     ieee802154_etm_set_event_task(IEEE802154_ETM_CHANNEL1, ETM_EVENT_TIMER0_OVERFLOW, ETM_TASK_RX_START);
     current_time = (uint32_t)esp_timer_get_time();
     ieee802154_timer0_set_threshold((is_target_time_expired(rx_target_time, current_time) ? 0 : (rx_target_time - current_time))); //uint: 1us
@@ -934,21 +916,52 @@ esp_err_t ieee802154_receive_at(uint32_t time)
     return ESP_OK;
 }
 
-static esp_err_t ieee802154_sleep_init(void)
-{
-    esp_err_t err = ESP_OK;
 #if SOC_PM_MODEM_RETENTION_BY_REGDMA && CONFIG_FREERTOS_USE_TICKLESS_IDLE
+static esp_err_t ieee802154_sleep_retention_init(void *arg)
+{
     #define N_REGS_IEEE802154() (((IEEE802154_MAC_DATE_REG - IEEE802154_REG_BASE) / 4) + 1)
     const static sleep_retention_entries_config_t ieee802154_mac_regs_retention[] = {
         [0] = { .config = REGDMA_LINK_CONTINUOUS_INIT(REGDMA_MODEM_IEEE802154_LINK(0x00), IEEE802154_REG_BASE, IEEE802154_REG_BASE, N_REGS_IEEE802154(), 0, 0), .owner = IEEE802154_LINK_OWNER },
     };
-    err = sleep_retention_entries_create(ieee802154_mac_regs_retention, ARRAY_SIZE(ieee802154_mac_regs_retention), REGDMA_LINK_PRI_7, SLEEP_RETENTION_MODULE_802154_MAC);
+    esp_err_t err = sleep_retention_entries_create(ieee802154_mac_regs_retention, ARRAY_SIZE(ieee802154_mac_regs_retention), REGDMA_LINK_PRI_IEEE802154, SLEEP_RETENTION_MODULE_802154_MAC);
     ESP_RETURN_ON_ERROR(err, IEEE802154_TAG, "failed to allocate memory for ieee802154 mac retention");
-    ESP_LOGI(IEEE802154_TAG, "ieee802154 mac sleep retention initialization");
+    ESP_LOGD(IEEE802154_TAG, "ieee802154 mac sleep retention initialization");
+    return err;
+}
+#endif
 
+static esp_err_t ieee802154_sleep_init(void)
+{
+    esp_err_t err = ESP_OK;
+#if SOC_PM_MODEM_RETENTION_BY_REGDMA && CONFIG_FREERTOS_USE_TICKLESS_IDLE
+    sleep_retention_module_init_param_t init_param = {
+        .cbs     = { .create = { .handle = ieee802154_sleep_retention_init, .arg = NULL } },
+        .depends = BIT(SLEEP_RETENTION_MODULE_BT_BB) | BIT(SLEEP_RETENTION_MODULE_CLOCK_MODEM)
+    };
+    err = sleep_retention_module_init(SLEEP_RETENTION_MODULE_802154_MAC, &init_param);
+    if (err == ESP_OK) {
+        err = sleep_retention_module_allocate(SLEEP_RETENTION_MODULE_802154_MAC);
+    }
+    ESP_RETURN_ON_ERROR(err, IEEE802154_TAG, "failed to create sleep retention linked list for ieee802154 mac retention");
 #if SOC_PM_RETENTION_HAS_CLOCK_BUG && CONFIG_MAC_BB_PD
     sleep_modem_register_mac_bb_module_prepare_callback(sleep_modem_mac_bb_power_down_prepare,
                                                    sleep_modem_mac_bb_power_up_prepare);
+#endif // SOC_PM_RETENTION_HAS_CLOCK_BUG && CONFIG_MAC_BB_PD
+#endif // SOC_PM_MODEM_RETENTION_BY_REGDMA && CONFIG_FREERTOS_USE_TICKLESS_IDLE
+    return err;
+}
+
+static esp_err_t ieee802154_sleep_deinit(void)
+{
+    esp_err_t err = ESP_OK;
+#if SOC_PM_MODEM_RETENTION_BY_REGDMA && CONFIG_FREERTOS_USE_TICKLESS_IDLE
+    err = sleep_retention_module_free(SLEEP_RETENTION_MODULE_802154_MAC);
+    if (err == ESP_OK) {
+        err = sleep_retention_module_deinit(SLEEP_RETENTION_MODULE_802154_MAC);
+    }
+#if SOC_PM_RETENTION_HAS_CLOCK_BUG && CONFIG_MAC_BB_PD
+    sleep_modem_unregister_mac_bb_module_prepare_callback(sleep_modem_mac_bb_power_down_prepare,
+                                                     sleep_modem_mac_bb_power_up_prepare);
 #endif // SOC_PM_RETENTION_HAS_CLOCK_BUG && CONFIG_MAC_BB_PD
 #endif // SOC_PM_MODEM_RETENTION_BY_REGDMA && CONFIG_FREERTOS_USE_TICKLESS_IDLE
     return err;
